@@ -2,8 +2,30 @@ from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel
 from bson import ObjectId
 from pymongo import AsyncMongoClient
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+import json
 
 app = FastAPI()
+
+
+# ========== ADD MIDDLEWARE HERE ==========
+class LoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        print("🔵 Request came in!")
+        print(f"   Method: {request.method}")
+        print(f"   Path: {request.url.path}")
+
+        response = await call_next(request)
+
+        print("🟢 Response sent out!")
+        print(f"   Status Code: {response.status_code}")
+
+        return response
+
+
+app.add_middleware(LoggingMiddleware)
+# =========================================
 
 # Connect to MongoDB (async client)
 client = AsyncMongoClient("mongodb+srv://fast:fast@cluster0.osr2phu.mongodb.net/")
@@ -23,28 +45,35 @@ async def startup_db():
     except Exception as e:
         print("❌ Error connecting to MongoDB on startup:", e)
 
+
 # Pydantic model for item
 class Item(BaseModel):
     name: str
     price: float
 
-# POST method – create item
-# @app.post("/items/", status_code=status.HTTP_201_CREATED)
-# async def mcreate_ite(item: Item):
-#     item_dict = item.dict()
-#     result = await collection.insert_one(item_dict)
-#     created = await collection.find_one({"_id": result.inserted_id})
-#     return {
-#         "id": str(created["_id"]),
-#         "name": created["name"],
-#         "price": created["price"],
-#     }
 
-#GET method – read all items
+# POST method – create item
+@app.post("/items/", status_code=status.HTTP_201_CREATED)
+async def mcreate_item(item: Item):
+    item_dict = item.dict()
+    result = await collection.insert_one(item_dict)
+    created = await collection.find_one({"_id": result.inserted_id})
+
+    response_data = {
+        "id": str(created["_id"]),
+        "name": created["name"],
+        "price": created["price"],
+    }
+
+    print(f"📤 Response Data: {response_data}")
+
+    return response_data
+
+# GET method – read all items
 # @app.get("/items/")
 # async def get_items():
 #     items = []
-#     cursor = collection.find({"price": {"$gt": 40}})  # async cursor from PyMongo Async API :contentReference[oaicite:0]{index=0}
+#     cursor = collection.find({"price": {"$gt": 40}})
 #     async for doc in cursor:
 #         items.append({
 #             "id": str(doc["_id"]),
@@ -53,7 +82,7 @@ class Item(BaseModel):
 #         })
 #     return items
 
-#PUT (update) method – commented out for now
+# PUT (update) method – commented out for now
 # @app.put("/items/{item_id}")
 # async def update_item(item_id: str, item: Item):
 #     if not ObjectId.is_valid(item_id):
